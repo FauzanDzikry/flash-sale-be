@@ -1,6 +1,6 @@
 # Migration Runner
 
-Runner untuk menjalankan migration database (PostgreSQL) dari file SQL di folder `migrations/`. Satu file `main.go` dipanggil dengan flag untuk **up**, **down**, **force**, atau cek versi.
+Runner untuk menjalankan migration database (PostgreSQL) dari file SQL di folder `migrations/`. Satu file `main.go` dipanggil dengan flag untuk **membuat** migration baru, **up**, **down**, **force**, atau cek versi.
 
 ## Persyaratan
 
@@ -18,6 +18,7 @@ postgres://user:password@host:port/database?sslmode=disable
 
 | Flag | Deskripsi |
 |------|------------|
+| **`-create "nama"`** | **Buat** pasangan file migration baru (`.up.sql` dan `.down.sql`). Tidak butuh DATABASE_URL. Nama disanitasi (lowercase, spasi jadi underscore). |
 | `-up` | Jalankan semua migration yang belum dijalankan (migrate up). |
 | `-down` | Jalankan migration ke bawah. Default 1 step. Gunakan `-steps N` untuk N step. |
 | `-down-all` | Rollback semua migration sampai versi 0. |
@@ -57,6 +58,10 @@ export DATABASE_URL="postgres://postgres:password@localhost:5432/flash_sale?sslm
 Dari root project:
 
 ```bash
+# Buat migration baru (tanpa butuh DATABASE_URL)
+go run ./cmd/migrate -create add_products_table
+# Menghasilkan: migrations/000003_add_products_table.up.sql dan .down.sql
+
 # Cek versi migration saat ini
 go run ./cmd/migrate
 
@@ -111,7 +116,7 @@ File migration berada di folder **`migrations/`** (di root project) dengan forma
 - `000001_nama_migration.up.sql`   — dijalankan saat **up**
 - `000001_nama_migration.down.sql` — dijalankan saat **down**
 
-Nomor versi harus berurutan (000001, 000002, …). Tambah file baru dengan nomor berikutnya saat menambah migration.
+Nomor versi harus berurutan (000001, 000002, …). Pakai **`-create nama`** untuk membuat pasangan file baru; nomor versi berikutnya akan dipilih otomatis.
 
 ## Menangani dirty state
 
@@ -148,4 +153,12 @@ no change (already up to date)
 
 ```
 migrate down all ok (2 step(s))
+```
+
+**Buat migration baru (`-create`):**
+
+```
+created migrations/000003_add_products_table.up.sql
+created migrations/000003_add_products_table.down.sql
+migration files created
 ```
