@@ -20,12 +20,14 @@ import (
 var (
 	ErrEmailAlreadyExists = errors.New("email already registered")
 	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrUserNotFound       = errors.New("user not found")
 )
 
 type AuthService interface {
 	Register(req *dto.RegisterRequest) (*dto.UserResponse, error)
 	Login(req *dto.LoginRequest) (string, error)
 	ForgotPassword(req *dto.ForgotPasswordRequest) error
+	GetProfile(id string) (*dto.UserResponse, error)
 }
 
 type authService struct {
@@ -108,6 +110,28 @@ func (s *authService) Login(req *dto.LoginRequest) (string, error) {
 
 func (s *authService) ForgotPassword(req *dto.ForgotPasswordRequest) error {
 	return nil
+}
+
+func (s *authService) GetProfile(id string) (*dto.UserResponse, error) {
+	userID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("Invalid user ID: %w", err)
+	}
+	user, err := s.userRepo.GetById(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("finding user: %w", err)
+	}
+	if user.DeactivatedAt != nil {
+		return nil, ErrUserNotFound
+	}
+	return &dto.UserResponse{
+		ID:    user.ID.String(),
+		Email: user.Email,
+		Name:  user.Name,
+	}, nil
 }
 
 func isDuplicateError(err error) bool {
