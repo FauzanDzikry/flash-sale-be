@@ -48,7 +48,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := h.authService.Login(&req)
+	resp, err := h.authService.Login(&req)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
 			c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid email or password"})
@@ -57,7 +57,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to login"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, resp)
 }
 
 // Logout endpoint

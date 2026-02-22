@@ -25,7 +25,7 @@ var (
 
 type AuthService interface {
 	Register(req *dto.RegisterRequest) (*dto.UserResponse, error)
-	Login(req *dto.LoginRequest) (string, error)
+	Login(req *dto.LoginRequest) (*dto.LoginResponse, error)
 	ForgotPassword(req *dto.ForgotPasswordRequest) error
 	GetProfile(id string) (*dto.UserResponse, error)
 }
@@ -78,34 +78,44 @@ func (s *authService) Register(req *dto.RegisterRequest) (*dto.UserResponse, err
 	}, nil
 }
 
-func (s *authService) Login(req *dto.LoginRequest) (string, error) {
+func (s *authService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 	email := strings.TrimSpace(strings.ToLower(req.Email))
 	if email == "" {
-		return "", errors.New("email is required")
+		return nil, errors.New("email is required")
 	}
 	if strings.TrimSpace(req.Password) == "" {
-		return "", errors.New("password is required")
+		return nil, errors.New("password is required")
 	}
 
 	user, err := s.userRepo.GetByEmail(email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", ErrInvalidCredentials
+			return nil, ErrInvalidCredentials
 		}
-		return "", fmt.Errorf("finding user: %w", err)
+		return nil, fmt.Errorf("finding user: %w", err)
 	}
 	if user.DeactivatedAt != nil {
-		return "", ErrInvalidCredentials
+		return nil, ErrInvalidCredentials
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return "", ErrInvalidCredentials
+		return nil, ErrInvalidCredentials
 	}
 
 	token, err := s.generateJwt(user.ID, user.Email)
 	if err != nil {
-		return "", fmt.Errorf("generating JWT: %w", err)
+		return nil, fmt.Errorf("generating JWT: %w", err)
 	}
-	return token, nil
+	expiresInSec := s.config.JWTExpireHour * 3600
+	return &dto.LoginResponse{
+		AccessToken: token,
+		TokenType:   "Bearer",
+		ExpiresIn:   expiresInSec,
+		User: dto.UserResponse{
+			ID:    user.ID.String(),
+			Name:  user.Name,
+			Email: user.Email,
+		},
+	}, nil
 }
 
 func (s *authService) ForgotPassword(req *dto.ForgotPasswordRequest) error {

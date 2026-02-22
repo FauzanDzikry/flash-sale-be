@@ -10,6 +10,13 @@ type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
 }
+type LoginResponse struct {
+	AccessToken  string       `json:"access_token"`
+	RefreshToken string       `json:"refresh_token,omitempty"`
+	TokenType    string       `json:"token_type"`
+	ExpiresIn    int          `json:"expires_in,omitempty"`
+	User         UserResponse `json:"user"`
+}
 
 type ForgotPasswordRequest struct {
 	Email string `json:"email" binding:"required,email"`
