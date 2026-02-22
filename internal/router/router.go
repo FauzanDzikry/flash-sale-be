@@ -25,6 +25,8 @@ func New(deps Deps) *gin.Engine {
 
 	v1 := r.Group("/api/v1")
 	{
+		v1.GET("/ping", handler.Ping)
+
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/register", authHandler.Register)
