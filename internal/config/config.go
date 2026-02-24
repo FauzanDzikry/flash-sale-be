@@ -14,7 +14,7 @@ type Config struct {
 	DBSSLMode string
 
 	JWTKey        string
-	JWTExpireHour int
+	JWTExpireHour float64
 
 	SMTPHost string
 	SMTPPort string
@@ -32,7 +32,7 @@ func Load() *Config {
 		DBName:        getEnv("DB_NAME", ""),
 		DBSSLMode:     getEnv("DB_SSLMODE", ""),
 		JWTKey:        getEnv("JWT_SECRET", ""),
-		JWTExpireHour: getEnvInt("JWT_EXPIRE_HOUR", 24),
+		JWTExpireHour: getEnvFloat("JWT_EXPIRE_HOUR", 24),
 		SMTPHost:      getEnv("SMTP_HOST", ""),
 		SMTPPort:      getEnv("SMTP_PORT", ""),
 		SMTPUser:      getEnv("SMTP_USER", ""),
@@ -54,6 +54,18 @@ func getEnvInt(k string, defaultV int) int {
 		return defaultV
 	}
 	n, err := strconv.Atoi(v)
+	if err != nil {
+		return defaultV
+	}
+	return n
+}
+
+func getEnvFloat(k string, defaultV float64) float64 {
+	v := os.Getenv(k)
+	if v == "" {
+		return defaultV
+	}
+	n, err := strconv.ParseFloat(v, 64)
 	if err != nil {
 		return defaultV
 	}

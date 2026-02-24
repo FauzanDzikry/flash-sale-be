@@ -6,6 +6,7 @@ import (
 	"flash-sale-be/internal/middleware"
 	"flash-sale-be/internal/repository"
 	"flash-sale-be/internal/service"
+	"flash-sale-be/internal/store"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -19,7 +20,8 @@ type Deps struct {
 func New(deps Deps) *gin.Engine {
 	userRepo := repository.NewUserRepository(deps.DB)
 	authSvc := service.NewAuthService(userRepo, deps.Cfg)
-	authHandler := handler.NewAuthHandler(authSvc)
+	tokenBlacklist := store.NewMemoryBlacklist()
+	authHandler := handler.NewAuthHandler(authSvc, tokenBlacklist)
 
 	r := gin.Default()
 
@@ -31,8 +33,8 @@ func New(deps Deps) *gin.Engine {
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
-			auth.POST("/logout", authHandler.Logout)
-			auth.GET("/me", middleware.Jwt(deps.Cfg), authHandler.Me)
+			auth.POST("/logout", middleware.Jwt(deps.Cfg, tokenBlacklist), authHandler.Logout)
+			auth.GET("/me", middleware.Jwt(deps.Cfg, tokenBlacklist), authHandler.Me)
 		}
 	}
 

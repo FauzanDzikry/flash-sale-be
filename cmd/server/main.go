@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 
 	"flash-sale-be/internal/config"
 	"flash-sale-be/internal/router"
@@ -13,7 +14,9 @@ import (
 )
 
 func init() {
-	_ = godotenv.Load()
+	_ = godotenv.Load(".env")
+	if err := godotenv.Load(filepath.Join("..", ".env")); err == nil {
+	}
 }
 
 func main() {

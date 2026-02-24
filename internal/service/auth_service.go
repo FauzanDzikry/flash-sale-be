@@ -105,7 +105,7 @@ func (s *authService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("generating JWT: %w", err)
 	}
-	expiresInSec := s.config.JWTExpireHour * 3600
+	expiresInSec := int(s.config.JWTExpireHour * 3600)
 	return &dto.LoginResponse{
 		AccessToken: token,
 		TokenType:   "Bearer",
@@ -153,7 +153,7 @@ func isDuplicateError(err error) bool {
 }
 
 func (s *authService) generateJwt(userID uuid.UUID, email string) (string, error) {
-	exp := time.Now().Add(time.Duration(s.config.JWTExpireHour) * time.Hour)
+	exp := time.Now().Add(time.Duration(s.config.JWTExpireHour*3600) * time.Second)
 	claims := jwt.MapClaims{
 		"user_id": userID.String(),
 		"email":   email,

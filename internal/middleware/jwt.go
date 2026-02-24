@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"flash-sale-be/internal/config"
+	"flash-sale-be/internal/store"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func Jwt(cfg *config.Config) gin.HandlerFunc {
+func Jwt(cfg *config.Config, blacklist store.TokenBlacklist) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		auth := c.GetHeader("Authorization")
 		if auth == "" {
@@ -27,7 +29,14 @@ func Jwt(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		token, err := jwt.Parse(parts[1], func(token *jwt.Token) (interface{}, error) {
+		rawToken := parts[1]
+		if blacklist != nil && blacklist.IsBlacklisted(rawToken) {
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Token has been revoked"})
+			c.Abort()
+			return
+		}
+
+		token, err := jwt.Parse(rawToken, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
@@ -50,6 +59,15 @@ func Jwt(cfg *config.Config) gin.HandlerFunc {
 		}
 		if email, ok := claims["email"].(string); ok {
 			c.Set("email", email)
+		}
+		c.Set("token_raw", rawToken)
+		if exp, ok := claims["exp"]; ok {
+			switch v := exp.(type) {
+			case float64:
+				c.Set("token_exp", time.Unix(int64(v), 0))
+			case int64:
+				c.Set("token_exp", time.Unix(v, 0))
+			}
 		}
 		c.Next()
 	}

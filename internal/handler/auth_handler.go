@@ -3,19 +3,22 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"flash-sale-be/internal/dto"
 	"flash-sale-be/internal/service"
+	"flash-sale-be/internal/store"
 
 	"github.com/gin-gonic/gin"
 )
 
 type AuthHandler struct {
 	authService service.AuthService
+	blacklist   store.TokenBlacklist
 }
 
-func NewAuthHandler(authService service.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService service.AuthService, blacklist store.TokenBlacklist) *AuthHandler {
+	return &AuthHandler{authService: authService, blacklist: blacklist}
 }
 
 // Register endpoint
@@ -63,7 +66,22 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // Logout endpoint
 // POST /api/v1/auth/logout
 func (h *AuthHandler) Logout(c *gin.Context) {
-	//yang hapus token client
+	if h.blacklist != nil {
+		if raw, ok := c.Get("token_raw"); ok {
+			if tokenStr, ok := raw.(string); ok {
+				var expiresAt time.Time
+				if exp, ok := c.Get("token_exp"); ok {
+					if t, ok := exp.(time.Time); ok {
+						expiresAt = t
+					}
+				}
+				if expiresAt.IsZero() {
+					expiresAt = time.Now().Add(24 * time.Hour)
+				}
+				h.blacklist.Add(tokenStr, expiresAt)
+			}
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
