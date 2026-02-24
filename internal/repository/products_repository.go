@@ -19,6 +19,7 @@ type ProductsRepository interface {
 	GetById(id uuid.UUID) (*domain.Product, error)
 	GetByName(name string, id uuid.UUID) (*domain.Product, error)
 	GetAll(createdBy uuid.UUID) ([]*domain.Product, error)
+	GetAllNotDeleted() ([]*domain.Product, error)
 	Delete(id uuid.UUID) error
 }
 
@@ -62,11 +63,32 @@ func (r *productsRepository) GetByName(name string, id uuid.UUID) (*domain.Produ
 }
 
 func (r *productsRepository) GetAll(createdBy uuid.UUID) ([]*domain.Product, error) {
-	var products []*domain.Product
-	if err := r.db.Where("deleted_at IS NULL").Where("created_by = ?", createdBy).Find(&products).Error; err != nil {
+	var list []domain.Product
+	if err := r.db.Where("deleted_at IS NULL").Where("created_by = ?", createdBy).Find(&list).Error; err != nil {
 		return nil, err
 	}
-	return products, nil
+	out := make([]*domain.Product, 0, len(list))
+	for i := range list {
+		p := new(domain.Product)
+		*p = list[i]
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// GetAllNotDeleted returns all products from all users; excludes soft-deleted (deleted_at IS NULL).
+func (r *productsRepository) GetAllNotDeleted() ([]*domain.Product, error) {
+	var list []domain.Product
+	if err := r.db.Where("deleted_at IS NULL").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Product, 0, len(list))
+	for i := range list {
+		p := new(domain.Product)
+		*p = list[i]
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 func (r *productsRepository) Delete(id uuid.UUID) error {

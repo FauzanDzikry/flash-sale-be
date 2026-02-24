@@ -90,17 +90,28 @@ func (h *ProductsHandler) GetProductById(c *gin.Context) {
 	c.JSON(http.StatusOK, product)
 }
 
-// Get all products endpoint
+// GetAllProductsByUser returns only products owned by the logged-in user.
 // GET /api/v1/products
-func (h *ProductsHandler) GetAllProducts(c *gin.Context) {
+func (h *ProductsHandler) GetAllProductsByUser(c *gin.Context) {
 	userID := c.GetString("user_id")
 	if userID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "Unauthorized"})
 		return
 	}
-	products, err := h.productsService.GetAll(userID)
+	products, err := h.productsService.GetAllByUser(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to get products", "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, products)
+}
+
+// GetAllProducts returns all products (all users).
+// GET /api/v1/products/all
+func (h *ProductsHandler) GetAllProducts(c *gin.Context) {
+	products, err := h.productsService.GetAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to get all products", "error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, products)

@@ -25,7 +25,8 @@ type ProductsService interface {
 	Create(req *dto.CreateProductRequest) (*dto.ProductResponse, error)
 	Update(id string, req *dto.UpdateProductRequest) (*dto.ProductResponse, error)
 	GetById(id string, createdBy string) (*dto.ProductResponse, error)
-	GetAll(createdBy string) ([]*dto.ProductResponse, error)
+	GetAllByUser(createdBy string) ([]*dto.ProductResponse, error) // hanya produk milik user; mengecualikan deleted_at NOT NULL
+	GetAll() ([]*dto.ProductResponse, error)                       // semua produk (semua user); mengecualikan deleted_at NOT NULL
 	Delete(id string, createdBy string) error
 }
 
@@ -170,7 +171,8 @@ func (s *productsService) GetById(id string, createdBy string) (*dto.ProductResp
 	}, nil
 }
 
-func (s *productsService) GetAll(createdBy string) ([]*dto.ProductResponse, error) {
+// GetAllByUser returns only products owned by the given user. Excludes soft-deleted (deleted_at IS NULL).
+func (s *productsService) GetAllByUser(createdBy string) ([]*dto.ProductResponse, error) {
 	createdByUUID, err := uuid.Parse(createdBy)
 	if err != nil {
 		return nil, fmt.Errorf("invalid created by: %w", err)
@@ -179,22 +181,52 @@ func (s *productsService) GetAll(createdBy string) ([]*dto.ProductResponse, erro
 	if err != nil {
 		return nil, fmt.Errorf("getting products: %w", err)
 	}
-	productResponses := make([]*dto.ProductResponse, len(products))
-	for _, product := range products {
-		productResponses = append(productResponses, &dto.ProductResponse{
-			ID:        product.ID.String(),
-			Name:      product.Name,
-			Category:  product.Category,
-			Stock:     product.Stock,
-			Price:     product.Price,
-			Discount:  product.Discount,
-			CreatedAt: product.CreatedAt,
-			UpdatedAt: product.UpdatedAt,
-			DeletedAt: product.DeletedAt,
-			CreatedBy: product.CreatedBy.String(),
+	result := make([]*dto.ProductResponse, 0, len(products))
+	for _, p := range products {
+		result = append(result, &dto.ProductResponse{
+			ID:        p.ID.String(),
+			Name:      p.Name,
+			Category:  p.Category,
+			Stock:     p.Stock,
+			Price:     p.Price,
+			Discount:  p.Discount,
+			CreatedAt: p.CreatedAt,
+			UpdatedAt: p.UpdatedAt,
+			DeletedAt: p.DeletedAt,
+			CreatedBy: p.CreatedBy.String(),
 		})
 	}
-	return productResponses, nil
+	return result, nil
+}
+
+// GetAll returns all products (all users). Excludes soft-deleted (deleted_at IS NULL).
+func (s *productsService) GetAll() ([]*dto.ProductResponse, error) {
+	products, err := s.productsRepo.GetAllNotDeleted()
+	if err != nil {
+		return nil, fmt.Errorf("getting all products: %w", err)
+	}
+	if products == nil {
+		return []*dto.ProductResponse{}, nil
+	}
+	result := make([]*dto.ProductResponse, 0, len(products))
+	for _, p := range products {
+		if p == nil {
+			continue
+		}
+		result = append(result, &dto.ProductResponse{
+			ID:        p.ID.String(),
+			Name:      p.Name,
+			Category:  p.Category,
+			Stock:     p.Stock,
+			Price:     p.Price,
+			Discount:  p.Discount,
+			CreatedAt: p.CreatedAt,
+			UpdatedAt: p.UpdatedAt,
+			DeletedAt: p.DeletedAt,
+			CreatedBy: p.CreatedBy.String(),
+		})
+	}
+	return result, nil
 }
 
 func (s *productsService) Delete(id string, createdBy string) error {

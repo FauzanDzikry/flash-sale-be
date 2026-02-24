@@ -45,7 +45,8 @@ Endpoint berikut memerlukan header `Authorization: Bearer <access_token>`:
 
 - **GET** `/api/v1/auth/me` — mengambil profil user saat ini
 - **POST** `/api/v1/products` — membuat produk baru
-- **GET** `/api/v1/products` — daftar produk milik user yang login
+- **GET** `/api/v1/products` — daftar produk milik user yang login (getAllByUser)
+- **GET** `/api/v1/products/all` — daftar semua produk dari semua user (getAll)
 - **GET** `/api/v1/products/:id` — detail produk (hanya milik user)
 - **PUT** `/api/v1/products/:id` — mengubah produk
 - **DELETE** `/api/v1/products/:id` — menghapus produk (hanya milik user)
@@ -394,7 +395,7 @@ atau (token sudah logout/revoke)
 
 ### 6.6 Products
 
-Semua endpoint di bawah **memerlukan** header `Authorization: Bearer <access_token>`. Produk dikelola per user: list dan get by id hanya menampilkan produk milik user yang login; delete hanya boleh untuk produk milik user tersebut.
+Semua endpoint di bawah **memerlukan** header `Authorization: Bearer <access_token>`. Produk dikelola per user: list milik user (getAllByUser) dan get by id hanya menampilkan produk milik user yang login; delete hanya boleh untuk produk milik user tersebut. Endpoint **getAllByUser** (GET `/products`) dan **getAll** (GET `/products/all`) keduanya **mengecualikan produk yang sudah soft-delete** (`deleted_at` NOT NULL).
 
 ---
 
@@ -498,11 +499,11 @@ Nama produk sudah dipakai oleh user yang sama:
 
 ---
 
-#### 6.6.2 Daftar Semua Produk (Milik User)
+#### 6.6.2 Daftar Produk Milik User (GetAllByUser)
 
 **GET** `/api/v1/products`
 
-Mengembalikan daftar produk milik user yang sedang login.
+Mengembalikan daftar produk **hanya milik user yang sedang login**. Hanya user tersebut yang dapat akses. Produk yang sudah dihapus (soft-delete, `deleted_at` NOT NULL) **tidak** disertakan.
 
 ##### Parameter
 
@@ -555,7 +556,47 @@ Array of object produk:
 
 ---
 
-#### 6.6.3 Detail Produk by ID
+#### 6.6.3 Daftar Semua Produk (GetAll)
+
+**GET** `/api/v1/products/all`
+
+Mengembalikan daftar **semua produk dari semua user**. Dapat diakses oleh user yang terautentikasi. Produk yang sudah dihapus (soft-delete, `deleted_at` NOT NULL) **tidak** disertakan.
+
+##### Parameter
+
+Tidak ada parameter path atau query.
+
+##### Contoh Request
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/products/all" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+##### Response Sukses (200)
+
+Array of object produk (format sama seperti 6.6.2).
+
+##### Response Error (401)
+
+```json
+{
+  "message": "Unauthorized"
+}
+```
+
+##### Response Error (500)
+
+```json
+{
+  "message": "Failed to get all products",
+  "error": "..."
+}
+```
+
+---
+
+#### 6.6.4 Detail Produk by ID
 
 **GET** `/api/v1/products/:id`
 
@@ -630,7 +671,7 @@ Produk bukan milik user yang login:
 
 ---
 
-#### 6.6.4 Ubah Produk
+#### 6.6.5 Ubah Produk
 
 **PUT** `/api/v1/products/:id`
 
@@ -718,7 +759,7 @@ atau
 
 ---
 
-#### 6.6.5 Hapus Produk
+#### 6.6.6 Hapus Produk
 
 **DELETE** `/api/v1/products/:id`
 

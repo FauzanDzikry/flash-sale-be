@@ -46,8 +46,9 @@ func New(deps Deps) *gin.Engine {
 		{
 			products.POST("/", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.CreateProduct)
 			products.PUT("/:id", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.UpdateProduct)
+			products.GET("/all", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.GetAllProducts)
 			products.GET("/:id", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.GetProductById)
-			products.GET("/", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.GetAllProducts)
+			products.GET("/", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.GetAllProductsByUser)
 			products.DELETE("/:id", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.DeleteProduct)
 		}
 	}
