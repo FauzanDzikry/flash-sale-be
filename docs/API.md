@@ -4,7 +4,7 @@
 
 ### Deskripsi
 
-API ini merupakan backend untuk layanan **E-commerce Flash Sale**. Saat ini menyediakan health check dan manajemen autentikasi: registrasi pengguna, login, logout, serta pengambilan profil pengguna. Endpoint terkait produk dan flash sale dapat ditambahkan pada versi mendatang.
+API ini merupakan backend untuk layanan **E-commerce Flash Sale**. Saat ini menyediakan health check, manajemen autentikasi (registrasi, login, logout, profil), serta **CRUD produk** per user (create, list, get by id, update, delete). Endpoint flash sale dapat ditambahkan pada versi mendatang.
 
 ### Tujuan
 
@@ -41,9 +41,14 @@ Panggil endpoint **POST** `/api/v1/auth/login` dengan body JSON berisi `email` d
 
 ### Endpoint yang Dilindungi
 
-Hanya endpoint berikut yang memerlukan header `Authorization: Bearer <access_token>`:
+Endpoint berikut memerlukan header `Authorization: Bearer <access_token>`:
 
 - **GET** `/api/v1/auth/me` — mengambil profil user saat ini
+- **POST** `/api/v1/products` — membuat produk baru
+- **GET** `/api/v1/products` — daftar produk milik user yang login
+- **GET** `/api/v1/products/:id` — detail produk (hanya milik user)
+- **PUT** `/api/v1/products/:id` — mengubah produk
+- **DELETE** `/api/v1/products/:id` — menghapus produk (hanya milik user)
 
 Endpoint `register`, `login`, dan `logout` tidak memerlukan token.
 
@@ -111,9 +116,12 @@ Respons error berupa JSON dengan field `message` (wajib). Untuk validasi (400), 
 | 401 | Token tidak valid atau kedaluwarsa | `{"message": "Invalid token"}` |
 | 401 | Token sudah di-revoke (setelah logout) | `{"message": "Token has been revoked"}` |
 | 401 | Email atau password salah (login) | `{"message": "Invalid email or password"}` |
-| 403 | Reserved; belum digunakan | - |
+| 401 | Token tidak ada / tidak valid (endpoint products) | `{"message": "Unauthorized"}` |
+| 403 | Akses ditolak (produk bukan milik user) | `{"message": "You do not have access to this product", "error": "..."}` |
 | 404 | User tidak ditemukan (mis. GET /auth/me) | `{"message": "User not found"}` |
+| 404 | Produk tidak ditemukan | `{"message": "Product not found", "error": "..."}` |
 | 409 | Email sudah terdaftar (register) | `{"message": "Email already registered"}` |
+| 409 | Nama produk sudah dipakai (create/update) | `{"message": "Product with this name already exists", "error": "..."}` |
 | 500 | Kesalahan server (register/login gagal, invalid context) | `{"message": "..."}` |
 
 ---
@@ -379,6 +387,398 @@ atau (token sudah logout/revoke)
 ```json
 {
   "message": "Invalid User Context"
+}
+```
+
+---
+
+### 6.6 Products
+
+Semua endpoint di bawah **memerlukan** header `Authorization: Bearer <access_token>`. Produk dikelola per user: list dan get by id hanya menampilkan produk milik user yang login; delete hanya boleh untuk produk milik user tersebut.
+
+---
+
+#### 6.6.1 Buat Produk
+
+**POST** `/api/v1/products`
+
+Membuat produk baru. Produk terasosiasi dengan user melalui `created_by` (biasanya diisi dengan ID user dari token `/auth/me`).
+
+##### Parameter (Body, JSON)
+
+| Parameter  | Tipe   | Required | Deskripsi                                    |
+|------------|--------|----------|----------------------------------------------|
+| name       | string | Required | Nama produk                                  |
+| category   | string | Required | Kategori produk                              |
+| stock      | int    | Required | Jumlah stok (≥ 0)                            |
+| price      | number | Required | Harga (≥ 0)                                  |
+| discount   | number | Required | Diskon dalam persen (0–100)                  |
+| created_by | string | Required | UUID user pembuat (biasanya ID user login)   |
+
+##### Contoh Request
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/products" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token>" \
+  -d '{
+    "name": "Laptop Gaming",
+    "category": "Elektronik",
+    "stock": 10,
+    "price": 15000000,
+    "discount": 5,
+    "created_by": "550e8400-e29b-41d4-a716-446655440000"
+  }'
+```
+
+##### Response Sukses (201)
+
+```json
+{
+  "id": "660e8400-e29b-41d4-a716-446655440001",
+  "name": "Laptop Gaming",
+  "category": "Elektronik",
+  "stock": 10,
+  "price": 15000000,
+  "discount": 5,
+  "created_at": "2025-02-24T10:00:00Z",
+  "updated_at": "2025-02-24T10:00:00Z",
+  "deleted_at": null,
+  "created_by": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+##### Response Error (400)
+
+Validasi gagal atau data produk tidak valid (stock/price/discount):
+
+```json
+{
+  "message": "Invalid request",
+  "error": "..."
+}
+```
+
+atau
+
+```json
+{
+  "message": "Invalid product data",
+  "error": "..."
+}
+```
+
+##### Response Error (401)
+
+```json
+{
+  "message": "Unauthorized"
+}
+```
+
+##### Response Error (409)
+
+Nama produk sudah dipakai oleh user yang sama:
+
+```json
+{
+  "message": "Product with this name already exists",
+  "error": "..."
+}
+```
+
+##### Response Error (500)
+
+```json
+{
+  "message": "Failed to create product",
+  "error": "..."
+}
+```
+
+---
+
+#### 6.6.2 Daftar Semua Produk (Milik User)
+
+**GET** `/api/v1/products`
+
+Mengembalikan daftar produk milik user yang sedang login.
+
+##### Parameter
+
+Tidak ada parameter path atau query. User diidentifikasi dari JWT.
+
+##### Contoh Request
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/products" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+##### Response Sukses (200)
+
+Array of object produk:
+
+```json
+[
+  {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "name": "Laptop Gaming",
+    "category": "Elektronik",
+    "stock": 10,
+    "price": 15000000,
+    "discount": 5,
+    "created_at": "2025-02-24T10:00:00Z",
+    "updated_at": "2025-02-24T10:00:00Z",
+    "deleted_at": null,
+    "created_by": "550e8400-e29b-41d4-a716-446655440000"
+  }
+]
+```
+
+##### Response Error (401)
+
+```json
+{
+  "message": "Unauthorized"
+}
+```
+
+##### Response Error (500)
+
+```json
+{
+  "message": "Failed to get products",
+  "error": "..."
+}
+```
+
+---
+
+#### 6.6.3 Detail Produk by ID
+
+**GET** `/api/v1/products/:id`
+
+Mengembalikan detail satu produk. Hanya boleh mengakses produk yang `created_by`-nya sama dengan user yang login.
+
+##### Parameter (Path)
+
+| Parameter | Tipe   | Required | Deskripsi   |
+|-----------|--------|----------|-------------|
+| id        | string | Required | UUID produk |
+
+##### Contoh Request
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/products/660e8400-e29b-41d4-a716-446655440001" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+##### Response Sukses (200)
+
+```json
+{
+  "id": "660e8400-e29b-41d4-a716-446655440001",
+  "name": "Laptop Gaming",
+  "category": "Elektronik",
+  "stock": 10,
+  "price": 15000000,
+  "discount": 5,
+  "created_at": "2025-02-24T10:00:00Z",
+  "updated_at": "2025-02-24T10:00:00Z",
+  "deleted_at": null,
+  "created_by": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+##### Response Error (401)
+
+```json
+{
+  "message": "Unauthorized"
+}
+```
+
+##### Response Error (403)
+
+Produk bukan milik user yang login:
+
+```json
+{
+  "message": "You do not have access to this product",
+  "error": "..."
+}
+```
+
+##### Response Error (404)
+
+```json
+{
+  "message": "Product not found",
+  "error": "..."
+}
+```
+
+##### Response Error (500)
+
+```json
+{
+  "message": "Failed to get product",
+  "error": "..."
+}
+```
+
+---
+
+#### 6.6.4 Ubah Produk
+
+**PUT** `/api/v1/products/:id`
+
+Mengubah data produk.
+
+##### Parameter (Path)
+
+| Parameter | Tipe   | Required | Deskripsi   |
+|-----------|--------|----------|-------------|
+| id        | string | Required | UUID produk |
+
+##### Parameter (Body, JSON)
+
+| Parameter | Tipe   | Required | Deskripsi                |
+|-----------|--------|----------|--------------------------|
+| name      | string | Required | Nama produk              |
+| category  | string | Required | Kategori                 |
+| stock     | int    | Required | Jumlah stok (≥ 0)        |
+| price     | number | Required | Harga (≥ 0)              |
+| discount  | number | Required | Diskon dalam persen (0–100) |
+
+##### Contoh Request
+
+```bash
+curl -X PUT "http://localhost:8080/api/v1/products/660e8400-e29b-41d4-a716-446655440001" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token>" \
+  -d '{
+    "name": "Laptop Gaming Pro",
+    "category": "Elektronik",
+    "stock": 8,
+    "price": 14500000,
+    "discount": 10
+  }'
+```
+
+##### Response Sukses (200)
+
+Object produk yang sudah diupdate (format sama seperti response Get by ID).
+
+##### Response Error (400)
+
+```json
+{
+  "message": "Invalid request",
+  "error": "..."
+}
+```
+
+atau
+
+```json
+{
+  "message": "Invalid product data",
+  "error": "..."
+}
+```
+
+##### Response Error (404)
+
+```json
+{
+  "message": "Product not found",
+  "error": "..."
+}
+```
+
+##### Response Error (409)
+
+```json
+{
+  "message": "Product with this name already exists",
+  "error": "..."
+}
+```
+
+##### Response Error (500)
+
+```json
+{
+  "message": "Failed to update product",
+  "error": "..."
+}
+```
+
+---
+
+#### 6.6.5 Hapus Produk
+
+**DELETE** `/api/v1/products/:id`
+
+Menghapus produk (soft delete). Hanya produk yang `created_by`-nya sama dengan user yang login yang boleh dihapus.
+
+##### Parameter (Path)
+
+| Parameter | Tipe   | Required | Deskripsi   |
+|-----------|--------|----------|-------------|
+| id        | string | Required | UUID produk |
+
+##### Contoh Request
+
+```bash
+curl -X DELETE "http://localhost:8080/api/v1/products/660e8400-e29b-41d4-a716-446655440001" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+##### Response Sukses (200)
+
+```json
+{
+  "message": "Product deleted successfully"
+}
+```
+
+##### Response Error (401)
+
+```json
+{
+  "message": "Unauthorized"
+}
+```
+
+##### Response Error (403)
+
+Produk bukan milik user yang login:
+
+```json
+{
+  "message": "You do not have access to this product",
+  "error": "..."
+}
+```
+
+##### Response Error (404)
+
+```json
+{
+  "message": "Product not found",
+  "error": "..."
+}
+```
+
+##### Response Error (500)
+
+```json
+{
+  "message": "Failed to delete product",
+  "error": "..."
 }
 ```
 
