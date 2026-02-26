@@ -21,6 +21,8 @@ type ProductsRepository interface {
 	GetAll(createdBy uuid.UUID) ([]*domain.Product, error)
 	GetAllNotDeleted() ([]*domain.Product, error)
 	Delete(id uuid.UUID) error
+	GetByIdForUpdate(tx *gorm.DB, id uuid.UUID) (*domain.Product, error)
+	DecrementStock(tx *gorm.DB, productID uuid.UUID, quantity int) (int64, error)
 }
 
 type productsRepository struct {
@@ -93,4 +95,21 @@ func (r *productsRepository) GetAllNotDeleted() ([]*domain.Product, error) {
 
 func (r *productsRepository) Delete(id uuid.UUID) error {
 	return r.db.Model(&domain.Product{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
+}
+
+func (r *productsRepository) GetByIdForUpdate(tx *gorm.DB, id uuid.UUID) (*domain.Product, error) {
+	if tx == nil {
+		tx = r.db
+	}
+	var product domain.Product
+	if err := tx.Where("deleted_at IS NULL").Where("id = ?", id).First(&product).Error; err != nil {
+		return nil, err
+	}
+	return &product, nil
+}
+
+// DecrementStock decrements product stock by quantity inside tx. Returns rows affected (1 = success, 0 = not found or insufficient stock).
+func (r *productsRepository) DecrementStock(tx *gorm.DB, productID uuid.UUID, quantity int) (int64, error) {
+	res := tx.Model(&domain.Product{}).Where("id = ? AND stock >= ?", productID, quantity).Update("stock", gorm.Expr("stock - ?", quantity))
+	return res.RowsAffected, res.Error
 }

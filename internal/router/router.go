@@ -13,8 +13,9 @@ import (
 )
 
 type Deps struct {
-	DB  *gorm.DB
-	Cfg *config.Config
+	DB               *gorm.DB
+	Cfg              *config.Config
+	CheckoutService  service.CheckoutService
 }
 
 func New(deps Deps) *gin.Engine {
@@ -28,6 +29,9 @@ func New(deps Deps) *gin.Engine {
 	productsRepo := repository.NewProductsRepository(deps.DB)
 	productsService := service.NewProductsService(productsRepo)
 	productsHandler := handler.NewProductsHandler(productsService)
+
+	// Checkout (requires Deps.CheckoutService from main)
+	checkoutHandler := handler.NewCheckoutHandler(deps.CheckoutService)
 
 	r := gin.Default()
 
@@ -50,6 +54,11 @@ func New(deps Deps) *gin.Engine {
 			products.GET("/:id", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.GetProductById)
 			products.GET("/", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.GetAllProductsByUser)
 			products.DELETE("/:id", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.DeleteProduct)
+		}
+		checkouts := v1.Group("/checkouts")
+		checkouts.Use(middleware.Jwt(deps.Cfg, tokenBlacklist))
+		{
+			checkouts.POST("/", checkoutHandler.Checkout)
 		}
 	}
 

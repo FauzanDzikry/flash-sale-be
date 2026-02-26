@@ -4,7 +4,7 @@
 
 ### Deskripsi
 
-API ini merupakan backend untuk layanan **E-commerce Flash Sale**. Saat ini menyediakan health check, manajemen autentikasi (registrasi, login, logout, profil), serta **CRUD produk** per user (create, list, get by id, update, delete). Endpoint flash sale dapat ditambahkan pada versi mendatang.
+API ini merupakan backend untuk layanan **E-commerce Flash Sale**. Saat ini menyediakan health check, manajemen autentikasi (registrasi, login, logout, profil), **CRUD produk** per user (create, list, get by id, update, delete), serta **checkout** berbasis antrian Redis dengan worker pool untuk memproses pemesanan secara asinkron dan aman terhadap race condition.
 
 ### Tujuan
 
@@ -50,6 +50,7 @@ Endpoint berikut memerlukan header `Authorization: Bearer <access_token>`:
 - **GET** `/api/v1/products/:id` — detail produk (hanya milik user)
 - **PUT** `/api/v1/products/:id` — mengubah produk
 - **DELETE** `/api/v1/products/:id` — menghapus produk (hanya milik user)
+- **POST** `/api/v1/checkouts` — enqueue checkout (pemesanan diproses asinkron oleh worker)
 
 Endpoint `register`, `login`, dan `logout` tidak memerlukan token.
 
@@ -121,6 +122,8 @@ Respons error berupa JSON dengan field `message` (wajib). Untuk validasi (400), 
 | 403 | Akses ditolak (produk bukan milik user) | `{"message": "You do not have access to this product", "error": "..."}` |
 | 404 | User tidak ditemukan (mis. GET /auth/me) | `{"message": "User not found"}` |
 | 404 | Produk tidak ditemukan | `{"message": "Product not found", "error": "..."}` |
+| 404 | Produk tidak ditemukan (checkout) | `{"message": "Product not found", "error": "..."}` |
+| 400 | Stok tidak cukup (checkout) | `{"message": "Insufficient stock", "error": "..."}` |
 | 409 | Email sudah terdaftar (register) | `{"message": "Email already registered"}` |
 | 409 | Nama produk sudah dipakai (create/update) | `{"message": "Product with this name already exists", "error": "..."}` |
 | 500 | Kesalahan server (register/login gagal, invalid context) | `{"message": "..."}` |
@@ -819,6 +822,100 @@ Produk bukan milik user yang login:
 ```json
 {
   "message": "Failed to delete product",
+  "error": "..."
+}
+```
+
+---
+
+### 6.7 Checkout
+
+Checkout memakai **antrian Redis** dan **worker pool** di server. Request checkout hanya memasukkan job ke antrian dan mengembalikan **202 Accepted** beserta `job_id`. Proses sebenarnya (validasi stok, pengurangan stok, insert ke tabel `checkouts`) dilakukan asinkron oleh worker; dengan demikian race condition pada stok dapat dihindari.
+
+---
+
+#### 6.7.1 Enqueue Checkout
+
+**POST** `/api/v1/checkouts`
+
+Memasukkan permintaan checkout ke antrian. **Memerlukan** header `Authorization: Bearer <access_token>`. User diidentifikasi dari JWT; produk dan jumlah diminta via body. Setelah sukses, worker akan memproses job (cek stok, kurangi stok, buat record checkout). Jika stok tidak cukup, worker akan menolak job tersebut (tidak insert checkout).
+
+##### Parameter (Body, JSON)
+
+| Parameter  | Tipe   | Required | Deskripsi                          |
+|------------|--------|----------|------------------------------------|
+| product_id | string | Required | UUID produk yang akan dibeli       |
+| quantity   | int    | Required | Jumlah (minimal 1)                 |
+
+##### Contoh Request
+
+```bash
+curl -X POST "http://localhost:8080/api/v1/checkouts" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token>" \
+  -d '{
+    "product_id": "660e8400-e29b-41d4-a716-446655440001",
+    "quantity": 2
+  }'
+```
+
+##### Response Sukses (202 Accepted)
+
+```json
+{
+  "message": "Checkout accepted",
+  "job_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+`job_id` dapat digunakan untuk referensi atau pelacakan di sisi client (endpoint untuk mengecek status job per `job_id` saat ini belum disediakan).
+
+##### Response Error (400)
+
+Validasi body gagal atau quantity &lt; 1:
+
+```json
+{
+  "message": "Invalid request",
+  "error": "..."
+}
+```
+
+Stok tidak cukup (dicek saat enqueue; produk ada tetapi stok &lt; quantity):
+
+```json
+{
+  "message": "Insufficient stock",
+  "error": "..."
+}
+```
+
+##### Response Error (401)
+
+```json
+{
+  "message": "Unauthorized"
+}
+```
+
+##### Response Error (404)
+
+Produk tidak ditemukan:
+
+```json
+{
+  "message": "Product not found",
+  "error": "..."
+}
+```
+
+##### Response Error (500)
+
+Gagal memasukkan job ke antrian (mis. Redis down):
+
+```json
+{
+  "message": "Failed to enqueue checkout",
   "error": "..."
 }
 ```
