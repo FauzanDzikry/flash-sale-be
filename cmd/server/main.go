@@ -69,7 +69,12 @@ func main() {
 		}()
 	}
 
-	r := router.New(router.Deps{DB: db, Cfg: cfg, CheckoutService: checkoutSvc})
+	r := router.New(router.Deps{
+		DB:              db,
+		Cfg:             cfg,
+		CheckoutService: checkoutSvc,
+		Redis:           rdb,
+	})
 
 	addr := ":8080"
 	log.Printf("server listening on %s", addr)

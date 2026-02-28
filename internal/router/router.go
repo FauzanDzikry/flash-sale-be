@@ -9,13 +9,15 @@ import (
 	"flash-sale-be/internal/store"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type Deps struct {
-	DB               *gorm.DB
-	Cfg              *config.Config
-	CheckoutService  service.CheckoutService
+	DB              *gorm.DB
+	Cfg             *config.Config
+	CheckoutService service.CheckoutService
+	Redis           *redis.Client
 }
 
 func New(deps Deps) *gin.Engine {
@@ -32,6 +34,9 @@ func New(deps Deps) *gin.Engine {
 
 	// Checkout (requires Deps.CheckoutService from main)
 	checkoutHandler := handler.NewCheckoutHandler(deps.CheckoutService)
+
+	// Redis health
+	redisHealthHandler := handler.NewRedisHealthHandler(deps.Redis)
 
 	r := gin.Default()
 
@@ -55,6 +60,7 @@ func New(deps Deps) *gin.Engine {
 			products.GET("/", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.GetAllProductsByUser)
 			products.DELETE("/:id", middleware.Jwt(deps.Cfg, tokenBlacklist), productsHandler.DeleteProduct)
 		}
+		v1.GET("/ping/redis", redisHealthHandler.Ping)
 		checkouts := v1.Group("/checkouts")
 		checkouts.Use(middleware.Jwt(deps.Cfg, tokenBlacklist))
 		{
