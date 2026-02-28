@@ -50,6 +50,7 @@ Endpoint berikut memerlukan header `Authorization: Bearer <access_token>`:
 - **GET** `/api/v1/products/:id` — detail produk (hanya milik user)
 - **PUT** `/api/v1/products/:id` — mengubah produk
 - **DELETE** `/api/v1/products/:id` — menghapus produk (hanya milik user)
+- **GET** `/api/v1/checkouts` — daftar checkout milik user yang login
 - **POST** `/api/v1/checkouts` — enqueue checkout (pemesanan diproses asinkron oleh worker)
 
 Endpoint `register`, `login`, dan `logout` tidak memerlukan token.
@@ -916,6 +917,63 @@ Gagal memasukkan job ke antrian (mis. Redis down):
 ```json
 {
   "message": "Failed to enqueue checkout",
+  "error": "..."
+}
+```
+
+---
+
+#### 6.7.2 List Checkouts by User
+
+**GET** `/api/v1/checkouts`
+
+Mengambil daftar semua checkout milik user yang sedang login. **Memerlukan** header `Authorization: Bearer <access_token>`. User diidentifikasi dari JWT. Data diurutkan berdasarkan `created_at` descending (terbaru dahulu).
+
+##### Parameter
+
+Tidak ada parameter path, query, atau body.
+
+##### Contoh Request
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/checkouts" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+##### Response Sukses (200)
+
+```json
+[
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "product_id": "660e8400-e29b-41d4-a716-446655440001",
+    "product_name": "Laptop Gaming",
+    "quantity": 2,
+    "price": 15000000,
+    "discount": 5,
+    "total_price": 28500000,
+    "created_at": "2025-02-28T10:00:00Z",
+    "updated_at": "2025-02-28T10:00:00Z",
+    "deleted_at": null
+  }
+]
+```
+
+Jika user belum memiliki checkout, response berupa array kosong `[]`.
+
+##### Response Error (401)
+
+```json
+{
+  "message": "Unauthorized"
+}
+```
+
+##### Response Error (500)
+
+```json
+{
+  "message": "Failed to get checkouts",
   "error": "..."
 }
 ```

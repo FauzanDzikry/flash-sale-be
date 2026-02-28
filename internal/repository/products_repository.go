@@ -17,6 +17,7 @@ type ProductsRepository interface {
 	Create(product *domain.Product) error
 	Update(product *domain.Product) error
 	GetById(id uuid.UUID) (*domain.Product, error)
+	GetByIds(ids []uuid.UUID) ([]*domain.Product, error)
 	GetByName(name string, id uuid.UUID) (*domain.Product, error)
 	GetAll(createdBy uuid.UUID) ([]*domain.Product, error)
 	GetAllNotDeleted() ([]*domain.Product, error)
@@ -47,6 +48,21 @@ func (r *productsRepository) GetById(id uuid.UUID) (*domain.Product, error) {
 		return nil, err
 	}
 	return &product, nil
+}
+
+func (r *productsRepository) GetByIds(ids []uuid.UUID) ([]*domain.Product, error) {
+	if len(ids) == 0 {
+		return []*domain.Product{}, nil
+	}
+	var list []domain.Product
+	if err := r.db.Where("deleted_at IS NULL").Where("id IN ?", ids).Find(&list).Error; err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Product, 0, len(list))
+	for i := range list {
+		out = append(out, &list[i])
+	}
+	return out, nil
 }
 
 func (r *productsRepository) GetByName(name string, id uuid.UUID) (*domain.Product, error) {

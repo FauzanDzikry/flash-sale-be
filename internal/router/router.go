@@ -64,6 +64,7 @@ func New(deps Deps) *gin.Engine {
 		checkouts := v1.Group("/checkouts")
 		checkouts.Use(middleware.Jwt(deps.Cfg, tokenBlacklist))
 		{
+			checkouts.GET("/", checkoutHandler.ListByUser)
 			checkouts.POST("/", checkoutHandler.Checkout)
 		}
 	}

@@ -107,3 +107,55 @@ func TestCheckoutRepository_CreateWithTx(t *testing.T) {
 	require.NoError(t, db.First(&found, "id = ?", checkout.ID).Error)
 	assert.Equal(t, checkout.TotalPrice, found.TotalPrice)
 }
+
+func TestCheckoutRepository_GetAllByUserID(t *testing.T) {
+	db := setupCheckoutTestDB(t)
+	repo := NewCheckoutRepository(db)
+
+	userID := uuid.New()
+	otherUserID := uuid.New()
+	productID := uuid.New()
+
+	c1 := &domain.Checkout{
+		ID:         uuid.New(),
+		UserID:     userID,
+		ProductID:  productID,
+		Quantity:   1,
+		Price:      100,
+		Discount:   0,
+		TotalPrice: 100,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	c2 := &domain.Checkout{
+		ID:         uuid.New(),
+		UserID:     userID,
+		ProductID:  productID,
+		Quantity:   2,
+		Price:      50,
+		Discount:   10,
+		TotalPrice: 90,
+		CreatedAt:  time.Now().Add(-time.Hour),
+		UpdatedAt:  time.Now(),
+	}
+	c3 := &domain.Checkout{
+		ID:         uuid.New(),
+		UserID:     otherUserID,
+		ProductID:  productID,
+		Quantity:   1,
+		Price:      100,
+		Discount:   0,
+		TotalPrice: 100,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	require.NoError(t, repo.Create(c1))
+	require.NoError(t, repo.Create(c2))
+	require.NoError(t, repo.Create(c3))
+
+	list, err := repo.GetAllByUserID(userID)
+	require.NoError(t, err)
+	require.Len(t, list, 2)
+	assert.Equal(t, c1.ID, list[0].ID)
+	assert.Equal(t, c2.ID, list[1].ID)
+}

@@ -18,3 +18,9 @@ type CheckoutResponse struct {
 	UpdatedAt  time.Time  `json:"updated_at"`
 	DeletedAt  *time.Time `json:"deleted_at"`
 }
+
+// CheckoutListItemResponse extends CheckoutResponse with product name for list endpoint.
+type CheckoutListItemResponse struct {
+	CheckoutResponse
+	ProductName string `json:"product_name"`
+}

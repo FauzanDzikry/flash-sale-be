@@ -22,6 +22,7 @@ var (
 type CheckoutService interface {
 	EnqueueCheckout(ctx context.Context, userID string, req *dto.CheckoutRequest) (jobID string, err error)
 	ProcessCheckoutJob(ctx context.Context, job *queue.CheckoutJob) (*dto.CheckoutResponse, error)
+	GetCheckoutsByUser(ctx context.Context, userID string) ([]*dto.CheckoutListItemResponse, error)
 }
 
 type checkoutService struct {
@@ -127,5 +128,53 @@ func (s *checkoutService) ProcessCheckoutJob(ctx context.Context, job *queue.Che
 		UpdatedAt:  checkout.UpdatedAt,
 		DeletedAt:  checkout.DeletedAt,
 	}, nil
+}
+
+func (s *checkoutService) GetCheckoutsByUser(ctx context.Context, userID string) ([]*dto.CheckoutListItemResponse, error) {
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user id: %w", err)
+	}
+	checkouts, err := s.checkoutRepo.GetAllByUserID(userUUID)
+	if err != nil {
+		return nil, err
+	}
+	if len(checkouts) == 0 {
+		return []*dto.CheckoutListItemResponse{}, nil
+	}
+	productIDs := make([]uuid.UUID, 0, len(checkouts))
+	seen := make(map[uuid.UUID]bool)
+	for _, c := range checkouts {
+		if !seen[c.ProductID] {
+			productIDs = append(productIDs, c.ProductID)
+			seen[c.ProductID] = true
+		}
+	}
+	products, err := s.productsRepo.GetByIds(productIDs)
+	if err != nil {
+		return nil, err
+	}
+	productNames := make(map[uuid.UUID]string)
+	for _, p := range products {
+		productNames[p.ID] = p.Name
+	}
+	result := make([]*dto.CheckoutListItemResponse, 0, len(checkouts))
+	for _, c := range checkouts {
+		result = append(result, &dto.CheckoutListItemResponse{
+			CheckoutResponse: dto.CheckoutResponse{
+				ID:         c.ID.String(),
+				ProductID:  c.ProductID.String(),
+				Quantity:   c.Quantity,
+				Price:      c.Price,
+				Discount:   c.Discount,
+				TotalPrice: c.TotalPrice,
+				CreatedAt:  c.CreatedAt,
+				UpdatedAt:  c.UpdatedAt,
+				DeletedAt:  c.DeletedAt,
+			},
+			ProductName: productNames[c.ProductID],
+		})
+	}
+	return result, nil
 }
 

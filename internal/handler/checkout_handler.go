@@ -44,3 +44,19 @@ func (h *CheckoutHandler) Checkout(c *gin.Context) {
 	}
 	c.JSON(http.StatusAccepted, gin.H{"message": "Checkout accepted", "job_id": jobID})
 }
+
+// ListByUser returns all checkouts for the logged-in user.
+// GET /api/v1/checkouts
+func (h *CheckoutHandler) ListByUser(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Unauthorized"})
+		return
+	}
+	list, err := h.checkoutService.GetCheckoutsByUser(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to get checkouts", "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, list)
+}

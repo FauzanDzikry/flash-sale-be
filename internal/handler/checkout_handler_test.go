@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"flash-sale-be/internal/dto"
 	"flash-sale-be/internal/mocks"
 	"flash-sale-be/internal/service"
 	"net/http"
@@ -19,17 +20,20 @@ import (
 func setupCheckoutRouter(h *CheckoutHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/checkouts", func(c *gin.Context) {
-		c.Set("user_id", "user-123")
-		h.Checkout(c)
-	})
+	r.RedirectTrailingSlash = false
+	checkouts := r.Group("/checkouts")
+	checkouts.Use(func(c *gin.Context) { c.Set("user_id", "user-123"); c.Next() })
+	checkouts.GET("/", h.ListByUser)
+	checkouts.POST("/", h.Checkout)
 	return r
 }
 
 func setupCheckoutRouterUnauth(h *CheckoutHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.POST("/checkouts", h.Checkout)
+	r.RedirectTrailingSlash = false
+	r.GET("/checkouts/", h.ListByUser)
+	r.POST("/checkouts/", h.Checkout)
 	return r
 }
 
@@ -51,7 +55,7 @@ func TestCheckoutHandler_Checkout_Success(t *testing.T) {
 		"product_id": uuid.New().String(),
 		"quantity":   2,
 	})
-	req := httptest.NewRequest(http.MethodPost, "/checkouts", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/checkouts/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -75,7 +79,7 @@ func TestCheckoutHandler_Checkout_Unauthorized(t *testing.T) {
 		"product_id": uuid.New().String(),
 		"quantity":   1,
 	})
-	req := httptest.NewRequest(http.MethodPost, "/checkouts", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/checkouts/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -100,7 +104,7 @@ func TestCheckoutHandler_Checkout_ProductNotFound(t *testing.T) {
 		"product_id": uuid.New().String(),
 		"quantity":   1,
 	})
-	req := httptest.NewRequest(http.MethodPost, "/checkouts", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/checkouts/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -125,7 +129,7 @@ func TestCheckoutHandler_Checkout_InsufficientStock(t *testing.T) {
 		"product_id": uuid.New().String(),
 		"quantity":   100,
 	})
-	req := httptest.NewRequest(http.MethodPost, "/checkouts", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/checkouts/", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -142,7 +146,7 @@ func TestCheckoutHandler_Checkout_InvalidRequest(t *testing.T) {
 	checkoutSvc := mocks.NewMockCheckoutService(ctrl)
 	h := NewCheckoutHandler(checkoutSvc)
 
-	req := httptest.NewRequest(http.MethodPost, "/checkouts", bytes.NewReader([]byte(`{}`)))
+	req := httptest.NewRequest(http.MethodPost, "/checkouts/", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
@@ -150,4 +154,56 @@ func TestCheckoutHandler_Checkout_InvalidRequest(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCheckoutHandler_ListByUser_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	checkoutSvc := mocks.NewMockCheckoutService(ctrl)
+	h := NewCheckoutHandler(checkoutSvc)
+
+	list := []*dto.CheckoutListItemResponse{
+		{
+			CheckoutResponse: dto.CheckoutResponse{
+				ID:         uuid.New().String(),
+				ProductID:  uuid.New().String(),
+				Quantity:   2,
+				Price:      100,
+				Discount:   10,
+				TotalPrice: 180,
+			},
+			ProductName: "Laptop Gaming",
+		},
+	}
+	checkoutSvc.EXPECT().
+		GetCheckoutsByUser(gomock.Any(), "user-123").
+		Return(list, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/checkouts/", nil)
+	w := httptest.NewRecorder()
+	r := setupCheckoutRouter(h)
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp []map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp, 1)
+	assert.Equal(t, "Laptop Gaming", resp[0]["product_name"])
+	assert.Equal(t, float64(2), resp[0]["quantity"])
+}
+
+func TestCheckoutHandler_ListByUser_Unauthorized(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	checkoutSvc := mocks.NewMockCheckoutService(ctrl)
+	h := NewCheckoutHandler(checkoutSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/checkouts/", nil)
+	w := httptest.NewRecorder()
+	r := setupCheckoutRouterUnauth(h)
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
 }
