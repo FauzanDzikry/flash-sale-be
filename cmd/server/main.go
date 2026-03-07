@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -48,26 +47,6 @@ func main() {
 	checkoutRepo := repository.NewCheckoutRepository(db)
 	productsRepo := repository.NewProductsRepository(db)
 	checkoutSvc := service.NewCheckoutService(checkoutRepo, productsRepo, q, db)
-
-	const numWorkers = 5
-	for i := 0; i < numWorkers; i++ {
-		workerID := i
-		go func() {
-			for {
-				job, err := q.DequeueCheckout(context.Background())
-				if err != nil {
-					if errors.Is(err, queue.ErrEmptyQueue) {
-						continue
-					}
-					log.Printf("checkout worker %d dequeue error: %v", workerID, err)
-					continue
-				}
-				if _, err := checkoutSvc.ProcessCheckoutJob(context.Background(), job); err != nil {
-					log.Printf("checkout worker %d process job %s: %v", workerID, job.JobID, err)
-				}
-			}
-		}()
-	}
 
 	r := router.New(router.Deps{
 		DB:              db,
